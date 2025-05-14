@@ -1,43 +1,63 @@
 <script setup>
-import { ref, computed, watch, onBeforeMount, TransitionGroup } from "vue";
+import { ref, computed, onMounted, TransitionGroup } from "vue";
 import originalTodos from "./data/todos";
 import StatusFilter from "./components/StatusFilter.vue";
 import TodoItem from "./components/TodoItem.vue";
+import * as todoApi from "./api/todos";
+import Message from "./components/Message.vue";
 
 const todos = ref([]);
 
-onBeforeMount(() => {
+onMounted(async () => {
   try {
-    todos.value = JSON.parse(localStorage.getItem("todos"));
-  } catch (error) {}
-
-  if (!Array.isArray(todos.value)) {
-    todos.value = [];
+    todos.value = await todoApi.getTodos();
+  } catch (error) {
+    errorMessage.value.show("Unable to load todos");
   }
 });
 
 const title = ref("");
-const errorMessage = ref("");
+const errorMessage = ref(null);
 const activeTodos = computed(() =>
   todos.value.filter((todo) => !todo.completed)
 );
 const status = ref("all");
 
-function addTodo() {
+const addTodo = async () => {
   if (!title.value) {
-    errorMessage.value = "Title should not be empty";
-
+    errorMessage.value.show("Title should not be empty");
     return;
   }
 
-  todos.value.push({
-    id: Date.now(),
-    title: title.value,
-    completed: false,
-  });
+  try {
+    const newTodo = await todoApi.createTodo(title.value);
 
-  title.value = "";
-}
+    todos.value.push(newTodo);
+    title.value = "";
+  } catch (error) {
+    errorMessage.value.show("Unable to add a todo");
+  }
+};
+
+const updateTodo = async ({ id, title, completed }) => {
+  try {
+    const updatedTodo = await todoApi.updateTodo({ id, title, completed });
+    const currentTodo = todos.value.find((todo) => todo.id === id);
+
+    Object.assign(currentTodo, updatedTodo);
+  } catch (error) {
+    errorMessage.value.show("Unable to update a todo");
+  }
+};
+
+const deleteTodo = async (todoId) => {
+  try {
+    await todoApi.deleteTodo(todoId);
+    todos.value = todos.value.filter((todo) => todoId !== todo.id);
+  } catch (error) {
+    errorMessage.value.show("Unable to delete a todo");
+  }
+};
 
 const visibleTodos = computed(() => {
   if (status.value === "active") {
@@ -50,14 +70,6 @@ const visibleTodos = computed(() => {
 
   return todos.value;
 });
-
-watch(
-  todos,
-  (newTodos) => {
-    localStorage.setItem("todos", JSON.stringify(newTodos));
-  },
-  { deep: true }
-);
 </script>
 
 <template>
@@ -100,8 +112,8 @@ watch(
           v-for="todo of visibleTodos"
           :key="todo.id"
           :todo="todo"
-          @delete="todos.splice(todos.indexOf(todo), 1)"
-          @update="Object.assign(todo, $event)"
+          @delete="deleteTodo(todo.id)"
+          @update="updateTodo($event)"
         />
       </TransitionGroup>
 
@@ -126,34 +138,15 @@ watch(
       </footer>
     </div>
 
-    <!-- DON'T use conditional rendering to hide the notification -->
-    <!-- Add the
-    'hidden' class to hide the message smoothly -->
-    <div
-      v-if="errorMessage"
-      class="notification is-danger is-light has-text-weight-normal"
-    >
-      <button class="delete" @click="errorMessage = ''"></button>
+    <Message class="is-danger" ref="errorMessage">
+      <template #header>
+        <p>Server Error</p>
+      </template>
 
-      {{ errorMessage }}
-    </div>
-
-    <div
-      data-cy="ErrorNotification"
-      class="notification is-danger is-light has-text-weight-normal"
-    >
-      <button data-cy="HideErrorButton" class="delete"></button>
-      <!-- show only one message at a time -->
-      Unable to load todos
-      <br />
-      Title should not be empty
-      <br />
-      Unable to add a todo
-      <br />
-      Unable to delete a todo
-      <br />
-      Unable to update a todo
-    </div>
+      <template #default="{ text }">
+        <p>{{ text }}</p>
+      </template>
+    </Message>
   </div>
 </template>
 
