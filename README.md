@@ -8,7 +8,6 @@ A basic to-do application developed with Vue 3 using the Composition API. It pro
 ## 🔧 Technologies
 
 - Vue 3
-- Pinia
 - JavaScript
 - Composition API
 - Fetch API
